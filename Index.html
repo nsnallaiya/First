@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="NSN Farms">
+    <title>NSN Farms</title>
+    <style>
+        :root { --blue: #007aff; --bg: #f2f2f7; --card: #ffffff; --text: #000000; --gray: #8e8e93; --red: #ff3b30; --green: #34c759; }
+        * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+        body { margin: 0; background: var(--bg); color: var(--text); padding-bottom: 80px; padding-top: env(safe-area-inset-top); }
+        .header { background: var(--card); padding: 15px; text-align: center; font-size: 20px; font-weight: 600; border-bottom: 1px solid #ddd; position: sticky; top: 0; z-index: 10; }
+        .tab-content { display: none; padding: 15px; }
+        .tab-content.active { display: block; }
+        .card { background: var(--card); padding: 15px; border-radius: 10px; margin-bottom: 15px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        
+        /* Inputs & Buttons */
+        input, select { width: 100%; padding: 10px; margin-top: 5px; margin-bottom: 15px; border: 1px solid #ccc; border-radius: 8px; font-size: 16px; }
+        button { background: var(--blue); color: white; border: none; padding: 12px; border-radius: 8px; font-size: 16px; width: 100%; font-weight: 600; cursor: pointer; }
+        button.danger { background: var(--red); }
+        button.secondary { background: var(--gray); }
+        button.success { background: var(--green); margin-bottom:15px; }
+        
+        /* Floating Action Button */
+        .fab { position: fixed; bottom: 90px; right: 20px; background: var(--blue); color: white; width: 56px; height: 56px; border-radius: 50%; font-size: 30px; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 10px rgba(0,0,0,0.3); z-index: 100; border: none; cursor: pointer; }
+        
+        /* Bottom Navigation */
+        .bottom-nav { position: fixed; bottom: 0; left: 0; right: 0; background: var(--card); border-top: 1px solid #ddd; display: flex; justify-content: space-around; padding: 10px 0 calc(10px + env(safe-area-inset-bottom)); z-index: 100; }
+        .nav-item { color: var(--gray); text-align: center; font-size: 12px; flex: 1; padding: 5px; cursor: pointer; }
+        .nav-item.active { color: var(--blue); font-weight: 600; }
+        .nav-icon { font-size: 20px; display: block; margin-bottom: 4px; }
+
+        /* Modals */
+        .modal { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 200; justify-content: center; align-items: center; padding: 20px; }
+        .modal.active { display: flex; }
+        .modal-content { background: var(--card); padding: 20px; border-radius: 12px; width: 100%; max-width: 400px; max-height: 90vh; overflow-y: auto; }
+        
+        /* Flex rows */
+        .flex-row { display: flex; gap: 10px; margin-bottom: 10px; }
+        .flex-row > * { flex: 1; }
+        .segment-control { display: flex; border: 1px solid var(--blue); border-radius: 8px; overflow: hidden; margin-bottom: 15px; }
+        .segment-btn { flex: 1; padding: 8px; background: white; color: var(--blue); border: none; font-size: 14px; border-right: 1px solid var(--blue); }
+        .segment-btn:last-child { border-right: none; }
+        .segment-btn.active { background: var(--blue); color: white; }
+
+        .report-summary { display: flex; justify-content: space-between; border-bottom: 1px solid #eee; padding-bottom: 5px; margin-bottom: 5px; }
+    </style>
+</head>
+<body>
+
+    <div class="header">NSN Farms</div>
+
+    <!-- TAB 1: ATTENDANCE -->
+    <div id="tab-attendance" class="tab-content active">
+        <input type="date" id="attDate" onchange="loadAttendanceUI()">
+        <button class="success" onclick="saveAttendance()">Save Attendance</button>
+        <div id="attendanceList"></div>
+        <button class="success" onclick="saveAttendance()">Save Attendance</button>
+    </div>
+
+    <!-- TAB 2: REPORTS (WAGES & SUM) -->
+    <div id="tab-reports" class="tab-content">
+        <div class="card">
+            <label>Report Type</label>
+            <select id="repType" onchange="generateReport()">
+                <option value="all">All Employees</option>
+            </select>
+            <div class="flex-row">
+                <div><label>From</label><input type="date" id="repFrom" onchange="generateReport()"></div>
+                <div><label>To</label><input type="date" id="repTo" onchange="generateReport()"></div>
+            </div>
+            <button onclick="downloadCSV()" style="margin-bottom:10px;">Download CSV</button>
+        </div>
+        <div id="reportTotals" class="card" style="font-weight:bold; background: #e5f5ea;"></div>
+        <div id="reportDetails"></div>
+    </div>
+
+    <!-- TAB 3: EMPLOYEES -->
+    <div id="tab-employees" class="tab-content">
+        <div id="employeeList"></div>
+        <button class="fab" onclick="openEmpModal()">+</button>
+    </div>
+
+    <!-- TAB 4: SETTINGS -->
+    <div id="tab-settings" class="tab-content">
+        <div class="card">
+            <h3>Data Management</h3>
+            <p style="font-size:14px; color:var(--gray)">Data is saved securely on this iPhone.</p>
+            <button onclick="exportData()" style="margin-bottom:10px;">Backup Data (JSON)</button>
+            <input type="file" id="importFile" accept=".json" onchange="importData(event)">
+        </div>
+    </div>
+
+    <!-- Bottom Navigation -->
+    <div class="bottom-nav">
+        <div class="nav-item active" onclick="switchTab('attendance', this)"><span class="nav-icon">📅</span>Attendance</div>
+        <div class="nav-item" onclick="switchTab('reports', this)"><span class="nav-icon">📊</span>Wages & Sum</div>
+        <div class="nav-item" onclick="switchTab('employees', this)"><span class="nav-icon">👥</span>Employees</div>
+        <div class="nav-item" onclick="switchTab('settings', this)"><span class="nav-icon">⚙️</span>Settings</div>
+    </div>
+
+    <!-- Employee Modal (Add/Edit) -->
+    <div id="empModal" class="modal">
+        <div class="modal-content">
+            <h2 id="empModalTitle">Add Employee</h2>
+            <input type="hidden" id="empId">
+            <label>Name</label>
+            <input type="text" id="empName" placeholder="Worker Name">
+            <label>Default Daily Wage (₹)</label>
+            <input type="number" id="empWage" placeholder="e.g. 500">
+            <div class="flex-row">
+                <button onclick="saveEmployee()">Save</button>
+                <button class="secondary" onclick="closeModal('empModal')">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // DATA STORAGE VIA LOCALSTORAGE
+        let employees = JSON.parse(localStorage.getItem('nsn_employees')) || [];
+        let attendanceData = JSON.parse(localStorage.getItem('nsn_attendance')) || {};
+        let selectedDate = new Date().toISOString().split('T')[0];
+        const tasks = ["General", "Coconut palms", "Sesame", "Small onions", "American Sweet Corn", "Maize"];
+
+        // INIT
+        document.getElementById('attDate').value = selectedDate;
+        
+        // UTILS
+        function generateId() { return Date.now().toString(36) + Math.random().toString(36).substr(2); }
+        function saveDB() {
+            localStorage.setItem('nsn_employees', JSON.stringify(employees));
+            localStorage.setItem('nsn_attendance', JSON.stringify(attendanceData));
+        }
+
+        // TABS
+        function switchTab(tabId, el) {
+            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+            document.getElementById('tab-' + tabId).classList.add('active');
+            document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+            el.classList.add('active');
+            
+            if(tabId === 'attendance') loadAttendanceUI();
+            if(tabId === 'employees') renderEmployees();
+            if(tabId === 'reports') { populateReportFilter(); generateReport(); }
+        }
+
+        // EMPLOYEES TAB
+        function renderEmployees() {
+            const list = document.getElementById('employeeList');
+            if(employees.length === 0) {
+                list.innerHTML = `<div class="card" style="text-align:center;">No employees found. Tap the + button to add one.</div>`;
+                return;
+            }
+            list.innerHTML = employees.map(emp => `
+                <div class="card">
+                    <div class="report-summary"><strong>${emp.name}</strong> <span>₹${emp.defaultWage}/day</span></div>
+                    <div class="flex-row" style="margin-top:10px;">
+                        <button class="secondary" onclick="openEmpModal('${emp.id}')">Edit</button>
+                        <button class="danger" onclick="deleteEmployee('${emp.id}')">Delete</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function openEmpModal(id = null) {
+            document.getElementById('empModalTitle').innerText = id ? 'Edit Employee' : 'Add Employee';
+            if(id) {
+                const emp = employees.find(e => e.id === id);
+                document.getElementById('empId').value = emp.id;
+                document.getElementById('empName').value = emp.name;
+                document.getElementById('empWage').value = emp.defaultWage;
+            } else {
+                document.getElementById('empId').value = '';
+                document.getElementById('empName').value = '';
+                document.getElementById('empWage').value = '';
+            }
+            document.getElementById('empModal').classList.add('active');
+        }
+        function closeModal(id) { document.getElementById(id).classList.remove('active'); }
+
+        function saveEmployee() {
+            const id = document.getElementById('empId').value;
+            const name = document.getElementById('empName').value;
+            const wage = document.getElementById('empWage').value;
+            if(!name || !wage) return alert("Please enter name and wage.");
+            
+            if(id) {
+                const emp = employees.find(e => e.id === id);
+                emp.name = name; emp.defaultWage = Number(wage);
+            } else {
+                employees.push({ id: generateId(), name, defaultWage: Number(wage) });
+            }
+            saveDB();
+            closeModal('empModal');
+            renderEmployees();
+        }
+
+        function deleteEmployee(id) {
+            if(confirm("Delete this employee? Historical attendance records will lose this name reference.")) {
+                employees = employees.filter(e => e.id !== id);
+                saveDB();
+                renderEmployees();
+            }
+        }
+
+        // ATTENDANCE TAB
+        function loadAttendanceUI() {
+            selectedDate = document.getElementById('attDate').value;
+            const list = document.getElementById('attendanceList');
+            if(employees.length === 0) {
+                list.innerHTML = `<div class="card">Add employees in the Employees tab first.</div>`;
+                return;
+            }
+            
+            // Initialize day array if blank
+            if(!attendanceData[selectedDate]) {
+                attendanceData[selectedDate] = employees.map(emp => ({
+                    empId: emp.id, name: emp.name, status: 0, appliedWage: emp.defaultWage, advance: 0, task: 'General'
+                }));
+            } else {
+                // Add any new employees to today's record that might be missing
+                employees.forEach(emp => {
+                    if(!attendanceData[selectedDate].find(a => a.empId === emp.id)) {
+                        attendanceData[selectedDate].push({empId: emp.id, name: emp.name, status: 0, appliedWage: emp.defaultWage, advance: 0, task: 'General'});
+                    }
+                });
+            }
+
+            const dayData = attendanceData[selectedDate];
+            list.innerHTML = dayData.map(record => {
+                const taskOptions = tasks.map(t => `<option value="${t}" ${record.task === t ? 'selected' : ''}>${t}</option>`).join('');
+                return `
+                <div class="card">
+                    <div style="font-weight:600; font-size:18px; margin-bottom:10px;">${record.name}</div>
+                    <div class="segment-control">
+                        <button class="segment-btn ${record.status===1 ? 'active':''}" onclick="updateAtt('${record.empId}', 'status', 1)">Full Day</button>
+                        <button class="segment-btn ${record.status===0.5 ? 'active':''}" onclick="updateAtt('${record.empId}', 'status', 0.5)">Half Day</button>
+                        <button class="segment-btn ${record.status===0 ? 'active':''}" onclick="updateAtt('${record.empId}', 'status', 0)">Absent</button>
+                    </div>
+                    <div class="flex-row">
+                        <div><label style="font-size:12px">Wage (₹)</label><input type="number" value="${record.appliedWage}" onchange="updateAtt('${record.empId}', 'appliedWage', this.value)"></div>
+                        <div><label style="font-size:12px">Advance (₹)</label><input type="number" value="${record.advance}" onchange="updateAtt('${record.empId}', 'advance', this.value)"></div>
+                    </div>
+                    <select onchange="updateAtt('${record.empId}', 'task', this.value)">${taskOptions}</select>
+                </div>
+                `;
+            }).join('');
+        }
+
+        function updateAtt(empId, field, value) {
+            const record = attendanceData[selectedDate].find(a => a.empId === empId);
+            record[field] = (field === 'task') ? value : Number(value);
+            // Refresh UI if status changed for segment styling
+            if(field === 'status') loadAttendanceUI(); 
+        }
+
+        function saveAttendance() {
+            saveDB();
+            alert("✅ Attendance for " + selectedDate + " saved successfully!");
+        }
+
+        // REPORTS TAB
+        function populateReportFilter() {
+            const select = document.getElementById('repType');
+            select.innerHTML = `<option value="all">All Employees</option>` + 
+                employees.map(e => `<option value="${e.id}">${e.name}</option>`).join('');
+            
+            // Set defaults to current month if empty
+            if(!document.getElementById('repFrom').value) {
+                const date = new Date();
+                document.getElementById('repTo').value = date.toISOString().split('T')[0];
+                date.setDate(1);
+                document.getElementById('repFrom').value = date.toISOString().split('T')[0];
+            }
+        }
+
+        function generateReport() {
+            const from = document.getElementById('repFrom').value;
+            const to = document.getElementById('repTo').value;
+            const targetEmp = document.getElementById('repType').value;
+            
+            let totals = { days: 0, gross: 0, advance: 0, net: 0 };
+            let empStats = {};
+
+            // Aggregate data
+            Object.keys(attendanceData).forEach(date => {
+                if(date >= from && date <= to) {
+                    attendanceData[date].forEach(rec => {
+                        if((targetEmp === 'all' || targetEmp === rec.empId) && rec.status > 0) {
+                            if(!empStats[rec.empId]) {
+                                empStats[rec.empId] = { name: rec.name, days: 0, gross: 0, advance: 0 };
+                            }
+                            const gross = rec.status * rec.appliedWage;
+                            empStats[rec.empId].days += rec.status;
+                            empStats[rec.empId].gross += gross;
+                            empStats[rec.empId].advance += rec.advance;
+                            
+                            totals.days += rec.status;
+                            totals.gross += gross;
+                            totals.advance += rec.advance;
+                        }
+                    });
+                }
+            });
+
+            totals.net = totals.gross - totals.advance;
+
+            // Render Totals
+            document.getElementById('reportTotals').innerHTML = `
+                <div style="font-size:12px; color:var(--gray)">CONSOLIDATED SUM (${from} to ${to})</div>
+                <div class="report-summary" style="margin-top:10px"><span>Total Days:</span> <span>${totals.days}</span></div>
+                <div class="report-summary"><span>Total Gross:</span> <span>₹${totals.gross}</span></div>
+                <div class="report-summary"><span>Total Advances:</span> <span>₹${totals.advance}</span></div>
+                <div class="report-summary" style="border:none; font-size:18px; color:var(--blue)"><span>Net Payable:</span> <span>₹${totals.net}</span></div>
+            `;
+
+            // Render Details
+            document.getElementById('reportDetails').innerHTML = Object.values(empStats).map(stat => {
+                const net = stat.gross - stat.advance;
+                const paidKey = `paid_${stat.name}_${from}_${to}`;
+                const isPaid = localStorage.getItem(paidKey) === 'true';
+                
+                return `
+                <div class="card" style="${isPaid ? 'opacity:0.6;' : ''}">
+                    <div style="font-size:18px; font-weight:bold;">${stat.name}</div>
+                    <div class="report-summary" style="margin-top:10px"><span>Days Worked:</span> <span>${stat.days}</span></div>
+                    <div class="report-summary"><span>Gross Wage:</span> <span>₹${stat.gross}</span></div>
+                    <div class="report-summary"><span>Advance:</span> <span>₹${stat.advance}</span></div>
+                    <div class="report-summary" style="font-weight:bold"><span>Net Wage:</span> <span>₹${net}</span></div>
+                    <label style="display:flex; align-items:center; gap:10px; margin-top:15px; font-weight:bold; color: ${isPaid ? 'var(--green)' : 'var(--red)'}">
+                        <input type="checkbox" style="width:20px; height:20px; margin:0;" ${isPaid ? 'checked' : ''} 
+                        onchange="togglePaid('${paidKey}', this.checked)">
+                        Mark as Paid (Settled)
+                    </label>
+                </div>
+                `;
+            }).join('');
+        }
+
+        function togglePaid(key, checked) {
+            localStorage.setItem(key, checked);
+            generateReport(); // Refresh UI
+        }
+
+        function downloadCSV() {
+            const from = document.getElementById('repFrom').value;
+            const to = document.getElementById('repTo').value;
+            let csvContent = "data:text/csv;charset=utf-8,Date,Employee,Status,Wage,Advance,Task\n";
+            
+            Object.keys(attendanceData).sort().forEach(date => {
+                if(date >= from && date <= to) {
+                    attendanceData[date].forEach(rec => {
+                        if(rec.status > 0 || rec.advance > 0) {
+                            csvContent += `${date},"${rec.name}",${rec.status},${rec.appliedWage},${rec.advance},"${rec.task}"\n`;
+                        }
+                    });
+                }
+            });
+            
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", `NSN_Farms_${from}_to_${to}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        function exportData() {
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({employees, attendanceData}));
+            const link = document.createElement("a");
+            link.setAttribute("href", dataStr);
+            link.setAttribute("download", "NSN_Farms_Backup.json");
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        function importData(event) {
+            const file = event.target.files[0];
+            if(file && confirm("This will overwrite existing app data. Continue?")) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const data = JSON.parse(e.target.result);
+                    employees = data.employees || [];
+                    attendanceData = data.attendanceData || {};
+                    saveDB();
+                    alert("Data Restored Successfully!");
+                    window.location.reload();
+                };
+                reader.readAsText(file);
+            }
+        }
+    </script>
+</body>
+</html>
